@@ -575,34 +575,69 @@
     <button class="readability-toggle print-hide" id="readability-toggle">🔆 Alta Leggibilità</button>
 
     <!-- CONFIGURAZIONE URL BACKEND -->
-    <script>
-        // CONFIGURAZIONE - SOSTITUISCI CON IL TUO URL WEB APP GOOGLE APPS SCRIPT
-        const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/leodavinci.it/s/AKfycbzRUmpRxLZ_vkOEz12TN7ARfv2c1vAIbGVcXQlnipsSTsZ4589D48mje53_nzPHZ1Djhw/exec'; // <-- CAMBIA QUESTO!
+<script>
+    // CONFIGURAZIONE - SOSTITUISCI CON IL TUO URL WEB APP GOOGLE APPS SCRIPT
+    const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/leodavinci.it/s/AKfycbyWCqP1ipymug8dx2vPd49EIKm3DHzI7cjEVLp4-lf-nGnaOGHVN1MuknxFGZ6nZjAUpw/exec'; // <-- CAMBIA QUESTO!
+    
+    // Funzione per gestire le risposte - VERSIONE CORRETTA
+    async function callGasEndpoint(action, data) {
+        // Costruisci URL con parametro action
+        const url = `${GAS_WEBAPP_URL}?action=${action}`;
         
-        // Funzione per gestire le risposte
-        async function callGasEndpoint(action, data) {
-            const url = `${GAS_WEBAPP_URL}?action=${action}`;
+        try {
+            // Usiamo JSONP per superare i limiti CORS di Google Apps Script
+            return new Promise((resolve, reject) => {
+                // Crea un callback unico
+                const callbackName = 'callback_' + Math.random().toString(36).substr(2, 10);
+                
+                // Crea uno script temporaneo
+                const script = document.createElement('script');
+                
+                // Prepara i dati da inviare
+                const jsonData = encodeURIComponent(JSON.stringify(data));
+                
+                // Costruisci URL con callback e dati
+                script.src = `${url}&callback=${callbackName}&data=${jsonData}`;
+                
+                // Definisci la funzione callback globale
+                window[callbackName] = function(response) {
+                    // Pulisci
+                    document.body.removeChild(script);
+                    delete window[callbackName];
+                    
+                    if (response && response.success) {
+                        resolve(response);
+                    } else {
+                        reject(new Error(response?.message || 'Errore sconosciuto'));
+                    }
+                };
+                
+                // Gestione errori
+                script.onerror = function() {
+                    document.body.removeChild(script);
+                    delete window[callbackName];
+                    reject(new Error('Errore di connessione al server'));
+                };
+                
+                // Aggiungi lo script al documento
+                document.body.appendChild(script);
+                
+                // Timeout dopo 10 secondi
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        document.body.removeChild(script);
+                        delete window[callbackName];
+                        reject(new Error('Timeout: il server non risponde'));
+                    }
+                }, 10000);
+            });
             
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    mode: 'no-cors', // Necessario per Google Apps Script
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                // Con no-cors non possiamo leggere la risposta
-                // Assumiamo successo se non ci sono errori di rete
-                return { success: true, message: 'Operazione completata' };
-                
-            } catch (error) {
-                console.error('Errore di connessione:', error);
-                return { success: false, message: error.toString() };
-            }
+        } catch (error) {
+            console.error('Errore callGasEndpoint:', error);
+            return { success: false, message: error.toString() };
         }
-    </script>
+    }
+</script>
 
     <!-- LOGICA APPLICATIVA -->
     <script>
@@ -727,62 +762,69 @@
                 window.dataLoadedFromServer = true;
             }
 
-            // CERCA DATI ESISTENTI
-            async function checkForExistingData() {
-                const nome = document.getElementById('nome')?.value.trim();
-                const cognome = document.getElementById('cognome')?.value.trim();
-                const classe = document.getElementById('classe')?.value.trim();
-                const codiceSegreto = document.getElementById('codice_segreto')?.value.trim();
 
-                console.log('=== RICERCA DATI CLIENT ===');
-                console.log('Nome:', nome);
-                console.log('Cognome:', cognome);
-                console.log('Classe:', classe);
-                console.log('Codice Segreto:', codiceSegreto);
+          // CERCA DATI ESISTENTI - VERSIONE CORRETTA
+async function checkForExistingData() {
+    const nome = document.getElementById('nome')?.value.trim();
+    const cognome = document.getElementById('cognome')?.value.trim();
+    const classe = document.getElementById('classe')?.value.trim();
+    const codiceSegreto = document.getElementById('codice_segreto')?.value.trim();
 
-                if (!nome || !cognome || !classe || !codiceSegreto) {
-                    showSaveStatus('⚠️ Inserisci nome, cognome, classe e codice segreto prima di cercare dati', false);
-                    
-                    ['nome', 'cognome', 'classe', 'codice_segreto'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el && !el.value.trim()) {
-                            el.style.borderColor = 'red';
-                            setTimeout(() => el.style.borderColor = '', 3000);
-                        }
-                    });
-                    return;
-                }
+    console.log('=== RICERCA DATI CLIENT ===');
+    console.log('Nome:', nome);
+    console.log('Cognome:', cognome);
+    console.log('Classe:', classe);
+    console.log('Codice Segreto:', codiceSegreto);
 
-                const searchBtn = document.getElementById('cerca-dati-btn');
-                const originalText = searchBtn.textContent;
-                
-                try {
-                    searchBtn.textContent = '⏳ Cerco dati...';
-                    searchBtn.disabled = true;
-                    
-                    const requestData = {
-                        nome: nome,
-                        cognome: cognome,
-                        classe: classe,
-                        codiceSegreto: codiceSegreto
-                    };
-                    
-                    console.log('Dati inviati:', JSON.stringify(requestData));
-                    
-                    const result = await callGasEndpoint('load', requestData);
-                    
-                    // TODO: Implementare un modo per ricevere i dati reali dal server
-                    // Per ora mostriamo un messaggio
-                    showSaveStatus('✅ Funzione di ricerca da implementare con endpoint reale', true);
-                    
-                } catch (error) {
-                    console.error('Errore:', error);
-                    showSaveStatus('❌ Errore: ' + error.message, false);
-                } finally {
-                    searchBtn.textContent = originalText;
-                    searchBtn.disabled = false;
-                }
+    if (!nome || !cognome || !classe || !codiceSegreto) {
+        showSaveStatus('⚠️ Inserisci nome, cognome, classe e codice segreto prima di cercare dati', false);
+        
+        ['nome', 'cognome', 'classe', 'codice_segreto'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && !el.value.trim()) {
+                el.style.borderColor = 'red';
+                setTimeout(() => el.style.borderColor = '', 3000);
             }
+        });
+        return;
+    }
+
+    const searchBtn = document.getElementById('cerca-dati-btn');
+    const originalText = searchBtn.textContent;
+    
+    try {
+        searchBtn.textContent = '⏳ Cerco dati...';
+        searchBtn.disabled = true;
+        
+        const requestData = {
+            nome: nome,
+            cognome: cognome,
+            classe: classe,
+            codiceSegreto: codiceSegreto
+        };
+        
+        console.log('Dati inviati:', JSON.stringify(requestData));
+        
+        const result = await callGasEndpoint('load', requestData);
+        
+        console.log('Risposta ricevuta:', result);
+        
+        if (result && result.success && result.data) {
+            // Carica i dati nel form
+            loadDataFromServer(result.data);
+            showSaveStatus('✅ Dati caricati con successo!', true);
+        } else {
+            showSaveStatus('❌ ' + (result?.message || 'Nessun dato trovato'), false);
+        }
+        
+    } catch (error) {
+        console.error('Errore:', error);
+        showSaveStatus('❌ Errore: ' + error.message, false);
+    } finally {
+        searchBtn.textContent = originalText;
+        searchBtn.disabled = false;
+    }
+}
 
             // ------------------------------------------
             // SALVATAGGIO LOCALE
@@ -930,81 +972,80 @@
             // ------------------------------------------
             // SALVATAGGIO PRINCIPALE (SUL SERVER)
             // ------------------------------------------
-            async function saveAllData() {
-                const saveBtn = document.getElementById('save-btn');
-                if (!saveBtn) return;
-                
-                const originalText = saveBtn.textContent;
-                
-                // Validazione campi obbligatori
-                const nome = document.getElementById('nome')?.value.trim();
-                const cognome = document.getElementById('cognome')?.value.trim();
-                const classe = document.getElementById('classe')?.value.trim();
-                const codiceSegreto = document.getElementById('codice_segreto')?.value.trim();
-                const data = document.getElementById('data')?.value.trim();
-                const gruppo = document.getElementById('gruppo')?.value.trim();
-                const dichiarazione = document.getElementById('dichiarazione_etica')?.checked;
-                
-                if (!nome || !cognome || !classe || !codiceSegreto || !data || !gruppo) {
-                    showSaveStatus('⚠️ Compila tutti i campi anagrafici (incluso codice segreto)!', false);
-                    
-                    ['nome', 'cognome', 'classe', 'codice_segreto', 'data', 'gruppo'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el && !el.value.trim()) {
-                            el.style.borderColor = 'red';
-                            setTimeout(() => el.style.borderColor = '', 3000);
-                        }
-                    });
-                    return;
-                }
-
-                if (!dichiarazione) {
-                    showSaveStatus('⚠️ Devi accettare la dichiarazione etica!', false);
-                    document.getElementById('dichiarazione_etica').parentElement.style.backgroundColor = '#ffcdd2';
-                    setTimeout(() => {
-                        document.getElementById('dichiarazione_etica').parentElement.style.backgroundColor = '';
-                    }, 3000);
-                    return;
-                }
-
-                try {
-                    const dataToSave = saveToLocalStorage();
-                    if (!dataToSave) {
-                        throw new Error('Impossibile salvare i dati localmente');
-                    }
-
-                    saveBtn.textContent = '⏳ Salvataggio...';
-                    saveBtn.classList.add('btn-saving');
-                    saveBtn.disabled = true;
-
-                    // INVIO AL SERVER
-                    saveBtn.textContent = '📤 Invio al server...';
-                    
-                    const result = await callGasEndpoint('save', dataToSave);
-                    
-                    if (result.success) {
-                        saveBtn.textContent = '✅ Salvato!';
-                        showSaveStatus(result.message || 'Salvato con successo!', true);
-                        
-                        lastStudentCheck = { nome, cognome, classe };
-                    } else {
-                        throw new Error(result.message || 'Errore sconosciuto');
-                    }
-                    
-                } catch (error) {
-                    console.error('Errore saveAllData:', error);
-                    showSaveStatus('Errore durante il salvataggio: ' + error.message, false);
-                } finally {
-                    setTimeout(() => {
-                        if (saveBtn) {
-                            saveBtn.textContent = originalText;
-                            saveBtn.classList.remove('btn-saving');
-                            saveBtn.disabled = false;
-                        }
-                    }, 2000);
-                }
+           // SALVATAGGIO PRINCIPALE - VERSIONE CORRETTA
+async function saveAllData() {
+    const saveBtn = document.getElementById('save-btn');
+    if (!saveBtn) return;
+    
+    const originalText = saveBtn.textContent;
+    
+    // Validazione campi obbligatori
+    const nome = document.getElementById('nome')?.value.trim();
+    const cognome = document.getElementById('cognome')?.value.trim();
+    const classe = document.getElementById('classe')?.value.trim();
+    const codiceSegreto = document.getElementById('codice_segreto')?.value.trim();
+    const data = document.getElementById('data')?.value.trim();
+    const gruppo = document.getElementById('gruppo')?.value.trim();
+    const dichiarazione = document.getElementById('dichiarazione_etica')?.checked;
+    
+    if (!nome || !cognome || !classe || !codiceSegreto || !data || !gruppo) {
+        showSaveStatus('⚠️ Compila tutti i campi anagrafici (incluso codice segreto)!', false);
+        
+        ['nome', 'cognome', 'classe', 'codice_segreto', 'data', 'gruppo'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && !el.value.trim()) {
+                el.style.borderColor = 'red';
+                setTimeout(() => el.style.borderColor = '', 3000);
             }
+        });
+        return;
+    }
 
+    if (!dichiarazione) {
+        showSaveStatus('⚠️ Devi accettare la dichiarazione etica!', false);
+        document.getElementById('dichiarazione_etica').parentElement.style.backgroundColor = '#ffcdd2';
+        setTimeout(() => {
+            document.getElementById('dichiarazione_etica').parentElement.style.backgroundColor = '';
+        }, 3000);
+        return;
+    }
+
+    try {
+        const dataToSave = saveToLocalStorage();
+        if (!dataToSave) {
+            throw new Error('Impossibile salvare i dati localmente');
+        }
+
+        saveBtn.textContent = '⏳ Salvataggio...';
+        saveBtn.classList.add('btn-saving');
+        saveBtn.disabled = true;
+
+        // INVIO AL SERVER
+        saveBtn.textContent = '📤 Invio al server...';
+        
+        const result = await callGasEndpoint('save', dataToSave);
+        
+        if (result && result.success) {
+            saveBtn.textContent = '✅ Salvato!';
+            showSaveStatus(result.message || 'Salvato con successo!', true);
+            lastStudentCheck = { nome, cognome, classe };
+        } else {
+            throw new Error(result?.message || 'Errore durante il salvataggio');
+        }
+        
+    } catch (error) {
+        console.error('Errore saveAllData:', error);
+        showSaveStatus('❌ Errore: ' + error.message, false);
+    } finally {
+        setTimeout(() => {
+            if (saveBtn) {
+                saveBtn.textContent = originalText;
+                saveBtn.classList.remove('btn-saving');
+                saveBtn.disabled = false;
+            }
+        }, 2000);
+    }
+}
             // ------------------------------------------
             // SETUP EVENT LISTENER
             // ------------------------------------------
